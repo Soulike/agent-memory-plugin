@@ -4,7 +4,7 @@
 
 The user-side Plugin lets an agent read the shared profile and relevant experience records, then record information explicitly stated or verified in the current task. It consists of Skills and MCP. The user's runtime supplies the storage location and authentication; the first version accesses a configured GitHub repository.
 
-This document covers user-side implementation boundaries and follows the [shared contract](../README.md). A separate [consolidation Skill](memory-consolidation-design.md) handles batch compression and forgetting based on age.
+This document covers user-side implementation boundaries and follows the [shared contract](shared-contract.md). A separate [consolidation Skill](memory-consolidation-design.md) handles batch compression and forgetting based on age.
 
 ## Responsibilities and package contents
 

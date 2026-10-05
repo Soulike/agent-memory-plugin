@@ -4,7 +4,7 @@
 
 The consolidation side runs the Plugin's memory consolidation Skill to compress and forget older experience records according to the pool policy. Users can trigger it explicitly with a preset prompt or configure the same prompt in an agent that supports scheduled tasks.
 
-Consolidation runs independently of user-side conversations. The host starts tasks and supplies the model and access environment; the Skill defines consolidation rules and reuses the Plugin's MCP to read and write the same pool. This document follows the [shared contract](../README.md), with tools, authentication, and submission outcomes defined in the [Plugin design](memory-plugin-design.md).
+Consolidation runs independently of user-side conversations. The host starts tasks and supplies the model and access environment; the Skill defines consolidation rules and reuses the Plugin's MCP to read and write the same pool. This document follows the [shared contract](shared-contract.md), with tools, authentication, and submission outcomes defined in the [Plugin design](memory-plugin-design.md).
 
 ## Independent execution and prerequisites
 
