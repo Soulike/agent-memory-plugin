@@ -19,3 +19,9 @@ Start with the shared contract, then read the design for the role you are workin
 Track issues and specifications in [GitHub Issues](https://github.com/Soulike/agent-memory-plugin/issues).
 
 Engineering Skills follow [the Agent guidance](AGENTS.md), which routes to this repository's issue-tracker, triage-label, and domain documentation rules.
+
+## Pull request reviews
+
+Ready pull requests use [AI Review Workflow](https://github.com/Soulike/ai-review-workflow).
+See [review integration and recovery](docs/agents/pull-request-review.md) for
+repository configuration, verification, and failed-run recovery.
