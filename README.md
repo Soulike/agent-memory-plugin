@@ -25,3 +25,5 @@ Engineering Skills follow [the Agent guidance](AGENTS.md), which routes to this 
 Ready pull requests use [AI Review Workflow](https://github.com/Soulike/ai-review-workflow).
 See [review integration and recovery](docs/agents/pull-request-review.md) for
 repository configuration, verification, and failed-run recovery.
+
+Draft pull requests start AI review when marked ready for review.
