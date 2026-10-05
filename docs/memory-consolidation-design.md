@@ -1,92 +1,100 @@
-# 整理侧 Skill 设计
+# Consolidation Skill Design
 
-整理侧执行 Plugin 中的记忆整理 Skill，按池策略压缩和遗忘旧经历。用户可以用预制 Prompt 显式触发，也可以把同一 Prompt 配置给支持定时任务的 Agent。
+> **Status: Draft — not finalized.** This design remains open to revision.
 
-整理任务独立于用户侧会话。宿主负责启动任务、提供模型和访问环境；Skill 负责整理规则，复用 Plugin 的 MCP 读写同一池。本文遵守 [共同约定](../README.md)，工具、认证及提交结果遵守 [Plugin 设计](memory-plugin-design.md)。
+The consolidation side runs the Plugin's memory consolidation Skill to compress and forget older experience records according to the pool policy. Users can trigger it explicitly with a preset prompt or configure the same prompt in an agent that supports scheduled tasks.
 
-## 独立运行与接入条件
+Consolidation runs independently of user-side conversations. The host starts tasks and supplies the model and access environment; the Skill defines consolidation rules and reuses the Plugin's MCP to read and write the same pool. This document follows the [shared contract](../README.md), with tools, authentication, and submission outcomes defined in the [Plugin design](memory-plugin-design.md).
 
-整理 Agent 不需要连接或唤醒用户侧 Agent，也不需要取得其聊天全文。在自己的运行环境中，它需要：
+## Independent execution and prerequisites
 
-- 能加载整理 Skill，执行预制 Prompt 并调用 Plugin 的 MCP。
-- 固定绑定目标池，具备可用的 git / gh CLI 凭据及提交权限。
-- 由宿主提供模型、定时触发和运行结果查看方式。
+The consolidation agent does not need to connect to or wake the user-side agent, or obtain its full chat logs. In its own runtime, it needs:
 
-人工触发与定时触发执行同一任务。支持定时任务只是接入条件之一，还需要宿主能够运行 Skill 和工具；不预设所有 Agent 产品均可直接接入。
+- The ability to load the consolidation Skill, execute the preset prompt, and call the Plugin's MCP.
+- A fixed binding to the target pool, working git / gh CLI credentials, and permission to commit.
+- A host that provides the model, scheduled triggers, and access to task results.
 
-GitHub Actions、Agent 自带的定时器或其他调度环境都可以在满足条件后承载任务。选择哪一种、如何部署及模型认证，分别由运行环境处理；Plugin 不内置调度器、另一个 Agent 或模型 API 适配器。
+Manual and scheduled triggers execute the same task. Scheduled-task support is only one prerequisite; the host must also run the Skill and tools. Direct compatibility with every agent product is not assumed.
 
-## 触发入口与预制 Prompt
+GitHub Actions, an agent's built-in scheduler, or another scheduling environment can host the task when these prerequisites are met. Environment-specific configuration covers the choice of host, deployment, and model authentication. The Plugin does not embed a scheduler, another agent, or a model API adapter.
 
-插件提供独立的整理 Skill 和一份可直接复用的 Prompt。用户侧记忆使用 Skill 不默认触发它。定时器重复执行同一 Prompt，目标池来自配置，不能由记忆正文决定。
+## Triggers and preset prompt
 
-以下是待实现的 Prompt 草案，不代表已有可执行 Skill：
+The Plugin provides a separate consolidation Skill and a reusable prompt. The memory-use Skill does not trigger it by default. A scheduler repeats the same prompt, with the target pool selected by configuration rather than memory content.
+
+The following is a draft prompt for future implementation, not an existing executable Skill:
 
 ~~~text
-执行 Plugin 的记忆整理 Skill，处理当前配置绑定的记忆池。
+Run the Plugin's memory consolidation Skill for the currently bound memory pool.
 
-读取当前池版本和保留策略，只使用当前层材料。
-按原时间范围选择有限批次的旧经历与到期来源；保留当前有效协作档案。
-逐级压缩旧经历，仍超过容量目标时遗忘最旧经历；允许丢失旧关键摘要。
-仍保留的摘要须表达必要来源线索和未解争议；争议可以整组压缩或遗忘。
-不因摘要重写刷新时间，不补查 Git 历史。
-通过 MCP 将每批摘要及对应删除一起提交；版本冲突时重读并重新核对。
-没有整理需要时结束；结果未知时先确认原操作，不能盲目重复提交。
-输出简短结果：处理范围、压缩与遗忘情况、接受版本，以及失败或未完成部分。
+Read the current pool version and retention policy, using only current-layer material.
+Select bounded batches of older experience records and expired sources by their original
+time ranges. Preserve the valid current collaboration profile.
+Compress older records progressively. If the capacity target is still exceeded,
+forget the oldest records; older key summaries may also be lost.
+Retained summaries must express necessary source information and unresolved conflicts.
+Conflicting groups may be compressed or forgotten together.
+Do not reset timestamps when rewriting summaries or search Git history for more content.
+Use MCP to commit each batch's summaries together with their corresponding deletions.
+On version conflict, read again and reconcile.
+Exit when no consolidation is needed. If an outcome is unknown, confirm the original
+operation before retrying a submission.
+Report the scope processed, compression and forgetting, accepted versions, and any
+failures or unfinished work briefly.
 ~~~
 
-时间期限、容量数值和批次大小由池策略与工具限制提供。Prompt 不固定仓库地址、Token 或模型供应商。
+Retention periods, capacity values, and batch sizes come from the pool policy and tool limits. The prompt does not fix a repository address, token, or model provider.
 
-## 整理规则
+## Consolidation rules
 
-| 材料 | 整理方式 |
+| Material | Treatment |
 | --- | --- |
-| 当前有效协作档案 | 保留；不按年龄遗忘，不推断新偏好或协作约定 |
-| 较新的详细经历 | 暂时保留详细内容 |
-| 较旧经历 | 归并为背景、决定、原因和结果摘要 |
-| 更久远经历 | 压缩为最小核心结论 |
-| 压缩后仍超容量的经历 | 按原时间从旧到新遗忘，旧关键摘要也可丢弃 |
-| 到期来源 | 移出当前正文，必要来源线索与归档标识留在摘要中 |
-| 重复或未解决矛盾 | 合并重复；争议作为一组压缩或遗忘，不制造单边结论 |
+| Valid current collaboration profile | Preserve it; do not forget it based on age or infer new preferences or agreements |
+| Recent detailed experience records | Retain their detail for now |
+| Older experience records | Merge into summaries of background, decisions, reasons, and results |
+| Still older experience records | Compress into minimal core conclusions |
+| Records still exceeding capacity after compression | Forget from oldest to newest by original time; older key summaries can also be discarded |
+| Expired sources | Remove bodies from the current layer, retaining necessary source information and archive markers in summaries |
+| Duplicates or unresolved contradictions | Merge duplicates; compress or forget conflicting groups together without manufacturing a one-sided conclusion |
 
-归并使用相同上下文和相近时间段。摘要继承原时间范围，不把很旧的内容并入新记录以掩盖年龄。详细、摘要、最小结论等层级名称和年龄分界属于待确定的策略参数。
+Merge within the same context and nearby time periods. Summaries inherit original time ranges; do not conceal age by merging very old content into new records. Tier names such as detailed, summary, and minimal conclusion, along with age boundaries, remain policy parameters to be decided.
 
-可以损失细节，不能把未采纳方案改成已决定，也不能补充材料没有支持的结论。MCP 的结构校验不能证明语义正确；摘要质量需要以代表性材料验收。
+Detail may be lost, but unaccepted proposals must not become decisions, and summaries must not add unsupported conclusions. MCP's structural validation cannot establish semantic correctness. Summary quality needs validation with representative material.
 
-先清理到期来源，再压缩旧经历；仍超目标时遗忘最旧经历，必要时连同不再需要的关联元数据清理。整理须计入当前所有内容，不能通过另建永久摘要库或日志绕过容量目标。
+First remove expired sources, then compress older records. If the target is still exceeded, forget the oldest records, removing unneeded associated metadata where appropriate. Account for all current content; do not bypass the capacity target by creating another permanent summary store or log.
 
-当前档案不参与年龄淘汰。如果有效档案或单条输入自身超过其预算，不能靠遗忘其他经历解决，需向调用方说明并精简相应内容。预算数值和具体校验方式在实现阶段确定。
+The current profile is excluded from age-based eviction. If the valid profile or an individual input exceeds its own budget, forgetting other records cannot resolve that limit. Explain this to the caller and shorten the relevant content. Budget values and specific validation methods remain implementation decisions.
 
-## 一次任务的执行过程
+## Task execution
 
-1. 在线读取并验证绑定池，取得当前版本与策略，确定本次处理范围。无整理需要时返回无需修改。
-2. 分批读取符合时间或容量条件的当前材料；每批基于明确版本，限制输入和模型上下文规模。
-3. Agent 按 Skill 生成摘要与删除计划；MCP 校验格式、时间、来源关联、处理范围和档案保护。
-4. 通过同一批量修改能力提交摘要及对应删除。若版本已变，重新读取并核对受影响材料，不强制覆盖或盲目重放旧计划。
-5. 记录简短任务结果。多批任务中断时说明已接受的批次和未完成范围；再次执行从当前池重新判断需求。
+1. Read online and validate the bound pool. Obtain its current version and policy, then determine the scope to process. Return without changes when consolidation is unnecessary.
+2. Read bounded batches of current material eligible by age or capacity. Each batch uses an explicit version and limits input and model context size.
+3. The agent produces summaries and a deletion plan according to the Skill. MCP validates format, time ranges, source relationships, processing scope, and profile protection.
+4. Submit summaries and corresponding deletions through the shared batch-change capability. If the version has changed, read again and reconcile affected material rather than forcing an overwrite or blindly replaying the old plan.
+5. Record a brief task result. If a multi-batch task is interrupted, distinguish accepted batches from unfinished scope. A subsequent run reassesses the current pool.
 
-多个整理任务或用户侧写入可能并发。宿主可以减少重复触发，但其调度锁不能代替池的版本检查；两侧最终共用 MCP 的提交保护。
+Multiple consolidation tasks and user-side writes may run concurrently. The host can reduce duplicate triggers, but scheduling locks cannot replace pool version checks. Both roles use MCP's submission protection.
 
-整理不维护跨设备常驻运行状态，也不需要另一份长期任务数据库。若提交响应丢失，按原操作标识确认结果；确认所需的提交元数据不向模型暴露历史正文。失败恢复使用 [共同提交规则](memory-plugin-design.md#提交与失败处理)。
+Consolidation does not maintain persistent cross-device runtime state or require another long-lived task database. If a submission response is lost, confirm it using the original operation identifier. Confirmation metadata does not expose historical content to the model. Recovery follows the [shared submission rules](memory-plugin-design.md#submission-and-failure-handling).
 
-## 完成、滞后与历史边界
+## Completion, delays, and history boundaries
 
-完成表示本次范围内的修改已由远端接受；不能把生成了摘要或创建了本地提交当作完成。无需求是正常结果，读取失败、提交失败和结果未知应分别呈现。宿主负责保存运行结果以及定时失败时的通知与重跑方式。
+Completion means the remote has accepted changes within the reported scope. Generating summaries or creating local commits is insufficient. No work needed is a normal outcome; read failures, submission failures, and unknown outcomes are reported separately. The host stores task results and provides failure notifications and rerun mechanisms.
 
-定时任务可能没有按预期完成。整理 Skill 不承诺严格的运行时刻；当前容量目标与用户侧写入时的接纳规则需共同确定，不能用定时频率代替写入校验。
+Scheduled tasks may not finish as expected. The consolidation Skill does not promise exact execution times. The current capacity target and user-side write admission rules must be agreed together; scheduling frequency cannot replace write validation.
 
-压缩和遗忘只修改当前层，旧内容留在 Git 实际保留的历史中。例行整理不自动回溯旧正文，也不重写历史；用户明确要求查旧记忆或清理历史时，走相应的独立入口。
+Compression and forgetting modify only the current layer. Older content remains in the history actually retained by Git. Routine consolidation does not search historical content or rewrite history. Explicit user requests to retrieve old memories or clean history use their separate entry points.
 
-## 实施验收与待讨论方案
+## Implementation validation and open choices
 
-实施后重点验收：
+Implementation validation should cover:
 
-- 用户侧 Agent 完全未运行时，另一宿主仍能触发整理。
-- 无需求时不生成空提交；手动和定时执行遵循同一规则。
-- 经历随年龄逐级缩短，容量不足时确实遗忘，不刷新原时间。
-- 当前档案保留，明确纠正和未解矛盾的含义不被摘要扭曲。
-- 原文与摘要替换作为一批提交，并发新记录不会被旧整理覆盖。
-- 任务中断或响应丢失后能确认结果，从当前池继续而不重复写入。
-- 普通整理不召回历史，也不另存一份永久正文。
+- Another host can trigger consolidation while the user-side agent is completely stopped.
+- No unnecessary commits are created when there is no work; manual and scheduled runs follow the same rules.
+- Records become progressively shorter with age and are actually forgotten when capacity is insufficient, without resetting original time ranges.
+- The current profile is preserved, and summaries retain the meaning of explicit corrections and unresolved conflicts.
+- Replacing original records with summaries is committed as one batch; outdated consolidation cannot overwrite concurrent new records.
+- After interruption or a lost response, outcomes can be confirmed and processing can continue from the current pool without duplicate writes.
+- Routine consolidation does not recall history or store another permanent copy of the content.
 
-该侧实施时单独讨论时间策略、归并粒度、遗忘顺序、Prompt 内容、批次限制和整理质量评估。宿主调度部署按用户选定的环境另行配置；不影响用户侧 Plugin 的日常接口。
+Consolidation implementation discussions cover time policy, merge granularity, forgetting order, prompt content, batch limits, and quality evaluation. Scheduling deployment is configured separately for the chosen host without changing the user-side Plugin's everyday interface.

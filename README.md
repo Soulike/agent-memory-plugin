@@ -1,86 +1,88 @@
-# 跨 Agent 记忆系统：总览与共同约定
+# Cross-agent Memory: Overview and Shared Contract
 
-本系统有两个独立的使用侧：用户侧 Agent 用 Plugin 读取和记录记忆；整理侧 Agent 执行 Plugin 中的整理 Skill，压缩和遗忘旧经历。两侧独立运行，共用一个记忆池及其数据规则。
+> **Status: Draft — not finalized.** All design documents in this repository remain open to revision.
 
-本文保存两侧共同遵守的约定。具体实现分别讨论：
+This system has two independent roles: user-side agents use the Plugin to read and record memories; consolidation agents run the Plugin's consolidation Skill to compress and forget older experience records. The two roles run independently and share a memory pool and its data rules.
 
-| 设计文档 | 负责的问题 |
+This document defines their shared contract. Implementation details are discussed separately:
+
+| Design document | Responsibility |
 | --- | --- |
-| [用户侧 Plugin](docs/memory-plugin-design.md) | Skill 如何指导增删改查，MCP 如何包装 GitHub 操作，运行环境如何提供配置与认证 |
-| [整理侧 Skill](docs/memory-consolidation-design.md) | 如何选择旧材料、压缩和遗忘，如何用预制 Prompt 手动或定时执行 |
+| [User-side Plugin](docs/memory-plugin-design.md) | How the Skill guides memory CRUD, how MCP wraps GitHub operations, and how the runtime supplies configuration and authentication |
+| [Consolidation Skill](docs/memory-consolidation-design.md) | How to select older material, compress and forget it, and run the task manually or on a schedule using a preset prompt |
 
-这是设计文档，尚未实现 Plugin，也未执行真实跨设备读写或定时整理验证。字段名、工具名、目录及数值需要在各自实现讨论中确定。
+These are design documents. The Plugin has not been implemented, and actual cross-device reads, writes, and scheduled consolidation have not been validated. Field names, tool names, directories, and numerical settings remain to be determined during implementation discussions.
 
-## 共同架构
+## Shared architecture
 
 ~~~mermaid
 flowchart LR
-    U[用户侧 Agent：记忆使用 Skill] --> M1[Plugin 的 MCP]
-    M1 --> R[(GitHub 仓库：一个记忆池)]
-    T[宿主定时器 / 用户显式触发] --> C[整理侧 Agent：记忆整理 Skill]
-    C --> M2[Plugin 的 MCP]
+    U["User-side agent: memory-use Skill"] --> M1["Plugin MCP"]
+    M1 --> R[("GitHub repository: one memory pool")]
+    T["Host scheduler / explicit user trigger"] --> C["Consolidation agent: consolidation Skill"]
+    C --> M2["Plugin MCP"]
     M2 --> R
 ~~~
 
-Plugin 包含两个用途不同的 Skill 和同一套 MCP 工具。整理侧不依赖用户侧 Agent 正在运行；它在自己的环境中安装 Plugin、绑定池并获得访问凭据。调度器和模型由整理侧宿主提供。
+The Plugin contains two Skills with different purposes and one shared set of MCP tools. Consolidation does not require the user-side agent to be running. Its own environment installs the Plugin, binds it to a pool, and supplies access credentials. The consolidation host provides scheduling and the model.
 
-Plugin 提供操作记忆的规则与工具。用户提供存储：第一版是通过配置指定的 GitHub 仓库，由运行环境的 git / gh CLI 凭据完成访问。Plugin 内的 MCP 实现仓库操作与本地可重建缓存，不另外提供存储服务。
+The Plugin provides rules and tools for operating on memory. The user supplies storage: in the first version, a GitHub repository selected through configuration and accessed with the runtime's git / gh CLI credentials. The Plugin's MCP implements repository operations and rebuildable local caches without providing a separate storage service.
 
-一个池对应一个仓库；每个 Agent 配置固定绑定一个池。仓库类型不作限制，按操作检查读取、写入和绑定分支的提交权限。隔离使用独立池；建立新池应能快速生成独立身份、空数据和策略。共享池是唯一持久记忆权威，原生记忆由用户自行关闭。
+One pool corresponds to one repository, and each agent configuration is bound to a fixed pool. Repository visibility is unrestricted; read, write, and target-branch commit permissions are checked for the requested operation. Separate pools provide isolation. Creating a new pool should quickly produce a distinct identity, empty data, and a policy. The shared pool is the sole authority for persistent memory; users disable native agent memory themselves.
 
-## 记忆内容与唯一维护位置
+## Memory content and ownership
 
-| 内容 | 保存什么 | 维护位置与保留方式 |
+| Content | What it stores | Owner and retention |
 | --- | --- | --- |
-| 池级协作档案 | 当前身份、用户偏好、明确协作约定 | 池的当前档案；保留有效内容，明确修订时取代 |
-| 项目 / 主题经历 | 具体背景、决定、纠正、重要结果 | 池的当前经历；随年龄压缩，超出容量时允许遗忘 |
-| 短期来源 | 关键用户原话、核实证据、来源标识 | 池的短期材料；到期移出当前层，摘要保留必要来源线索 |
-| 通用方法 | 离开具体项目仍有效的“怎么做” | 知识库；记忆引用它，只记录采用背景、原因和结果 |
-| 旧版本 | 被改写、压缩或删除前的内容 | Git 历史；仅在用户明确要求时回溯 |
-| 缓存与索引 | 已同步版本、检索所需的派生数据 | 各运行环境本地；可重建，无独立内容权威 |
+| Pool collaboration profile | Current identity, user preferences, and explicit collaboration agreements | The pool's current profile; valid content is retained and superseded by explicit revisions |
+| Project / topic experience records | Specific background, decisions, corrections, and important results | The pool's current records; compressed with age and eligible for forgetting when capacity is exceeded |
+| Short-term sources | Key user quotations, verification evidence, and source identifiers | Short-term pool material; removed from the current layer on expiry, with necessary source information retained in summaries |
+| General methods | How to do something, remaining valid outside a specific project | The knowledge base; memory references it and records only the adoption context, reasons, and results |
+| Earlier versions | Content before revision, compression, or deletion | Git history; consulted only at the user's explicit request |
+| Caches and indexes | Synchronized versions and derived retrieval data | Local to each runtime; rebuildable and without independent content authority |
 
-自动记录只接受用户明确表达或纠正的信息，以及 Agent 已核实的重要结果。讨论中的备选方案、助手推断不自动成为事实。完整聊天记录仍由原客户端保存，MCP 不承担完整会话采集。
+Automatic recording accepts only information the user explicitly states or corrects, and important results verified by the agent. Alternatives under discussion and assistant inferences do not automatically become facts. Full chat logs remain with the original client; MCP does not collect complete sessions.
 
-共同身份描述协作角色和期望；实际工具、权限与行为边界由运行环境决定。经历反映某次确认时的状态，使用时仍需核实会变化的代码或远程状态；本系统不迁移运行中的任务、进程或终端。
+The shared identity describes collaboration roles and expectations. The runtime determines actual tools, permissions, and behavioral boundaries. Experience records describe the state at a particular confirmation point; changing code or remote state still needs verification when used. The system does not transfer running tasks, processes, or terminals.
 
-## 共同数据约定
+## Shared data contract
 
-记忆采用 Markdown 正文加少量元数据，允许人直接阅读、编辑和比较；人工编辑与 MCP 写入使用同一套格式校验。
+Memory uses Markdown bodies with a small amount of metadata, allowing people to read, edit, and compare it directly. Manual edits and MCP writes follow the same format validation rules.
 
-| 对象 | 需要表达的信息 |
+| Object | Required information |
 | --- | --- |
-| 池 | 稳定池 ID、格式版本、保留与容量策略 |
-| 上下文 | 稳定 ID、项目或主题、名称及别名；项目关联稳定仓库身份，不以设备本地路径为身份 |
-| 当前档案 | 当前有效内容、来源与明确修订关系 |
-| 经历 | 稳定 ID、所属上下文、原时间范围、压缩层级、状态、必要来源线索 |
-| 纠正 / 矛盾 | 明确取代关系，或尚未解决的争议关联 |
-| 短期来源 | 用户原话或核实证据、发生时间、能够取得的来源标识 |
-| 历史查询结果 | 当时的版本与时间，以及查询覆盖范围 |
+| Pool | Stable pool ID, format version, retention and capacity policy |
+| Context | Stable ID, project or topic, name and aliases; projects use a stable repository identity rather than a device-local path |
+| Current profile | Currently valid content, sources, and explicit revision relationships |
+| Experience record | Stable ID, context, original time range, compression level, status, and necessary source information |
+| Correction / contradiction | Explicit supersession relationships or links between unresolved conflicting records |
+| Short-term source | User quotation or verification evidence, occurrence time, and available source identifiers |
+| History query result | The version and time represented, and the scope covered by the query |
 
-字段名和文件布局由共同格式的实现讨论确定，不在两侧分别定义。来源标识缺失时不编造；来源正文过期后，保留线索并标识其已不在当前层，不能把它当作仍可直接读取的证据。
+Field names and file layout are determined in the shared format's implementation discussion, rather than defined independently for each role. Missing source identifiers must not be invented. When source bodies expire, retain source information and mark the bodies as absent from the current layer; do not present them as evidence that can still be read directly.
 
-明确纠正可以取代旧内容；没有明确取代关系的矛盾保留，用到时澄清。后写入不代表更正确。整理可以将争议作为一组压缩或遗忘，不能通过单边删除制造确定结论。
+Explicit corrections can supersede earlier content. Contradictions without an explicit supersession relationship are retained and clarified when relevant. A later write is not inherently more correct. Consolidation may compress or forget a conflicting group together, but must not manufacture certainty by deleting only one side.
 
-经历按原时间范围计算年龄；摘要继承材料的原时间范围。重新摘要、搜索命中和例行读取不刷新年龄。本次实际使用的旧内容，可以连同来源写入一条新的使用经历；无需维护访问计数、最近使用时间或热度分数。
+Record age is calculated from the original time range, which summaries inherit from their source material. Re-summarization, search hits, and routine reads do not reset age. Older content actually used in the current task may be recorded as a new experience with its sources. Access counts, last-used timestamps, and popularity scores are unnecessary.
 
-## 共同存取约定
+## Shared access contract
 
-两侧都通过 MCP 访问绑定池。读取和批量修改基于可识别的池版本；提交须检查基准版本，防止旧计划覆盖另一侧的新记录。每批摘要与其对应删除一起提交，不能出现只删掉原文、摘要尚未保存的中间结果。
+Both roles access the bound pool through MCP. Reads and batch changes use identifiable pool versions. Submissions must check the base version to prevent an outdated plan from overwriting new records from the other role. Each batch commits summaries together with their corresponding deletions, avoiding an intermediate state where source text has been deleted but its summary has not been saved.
 
-更新必须在线，只有远端接受提交才报告已保存；离线更新失败，不排队。离线读取可使用已同步副本，并说明版本与同步时间；无副本、格式损坏或检索失败不能伪装成“没有相关记忆”。详细失败与恢复规则由 [Plugin 设计](docs/memory-plugin-design.md#提交与失败处理) 定义，两侧共用。
+Updates require connectivity and count as saved only after the remote accepts the commit. Offline updates fail and are not queued. Offline reads may use a synchronized copy, identifying its version and synchronization time. Missing copies, invalid formats, and retrieval failures must not be presented as an absence of relevant memories. The [Plugin design](docs/memory-plugin-design.md#submission-and-failure-handling) defines detailed failure and recovery behavior shared by both roles.
 
-当前记忆、每次召回和 Git 历史分别考虑预算。当前容量覆盖档案、经历、短期来源及元数据；缓存和索引不能成为另一份永久内容库。当前档案保留有效内容，经历允许有损压缩及遗忘，包括旧的关键摘要。
+Current memory, each recall, and Git history have separate budgets. Current capacity includes profiles, experience records, short-term sources, and metadata. Caches and indexes must not become another permanent content store. Valid current profile content is retained; experience records permit lossy compression and forgetting, including older key summaries.
 
-保留期限、压缩层级与容量目标保存在池策略中，两侧读取同一策略。具体数值留待实现讨论。定时整理无法单独保证每次新写入后立即满足硬上限；“整理目标”与“写入时硬上限”是否相同，以及整理滞后时如何接纳新写入，是需要共同确定的容量接口。
+Retention periods, compression levels, and capacity targets are stored in the pool policy and read by both roles. Numerical values remain open for implementation discussion. Scheduled consolidation alone cannot guarantee an immediate hard limit after every new write. The shared capacity interface must determine whether the consolidation target and write-time hard limit are the same, and how to accept new writes when consolidation falls behind.
 
-普通召回和例行整理只处理当前层。Git 历史是可清理的归档，历史正文仅在用户明确要求时回溯；检查提交是否成功所需的版本元数据不属于历史正文召回。旧信息恢复到当前层前重新核实，按正常规则保存需要的部分。
+Ordinary recall and routine consolidation process only the current layer. Git history is a cleanable archive whose content is consulted only at the user's explicit request. Version metadata used to confirm a submission is not historical-content recall. Before restoring old information to the current layer, verify it again and save the needed portion under the normal recording rules.
 
-删除当前内容与清理 Git 历史分别操作。历史清理需用户明确触发并说明失去的范围，不作为定时遗忘的一部分，也不保证其他设备副本或旧 Git 对象已物理消失。
+Deleting current content and cleaning Git history are separate operations. History cleanup requires explicit user initiation and a description of the archive scope that will be lost. It is not part of scheduled forgetting and does not guarantee physical removal of copies on other devices or old Git objects.
 
-## 实现讨论的分界
+## Implementation discussion boundaries
 
-用户侧讨论工具接口、git / gh 操作路径、缓存、建池流程、发布及客户端适配；整理侧讨论时间分层、归并与遗忘规则、整理 Prompt、批次与整理质量。共同格式和容量接口变化时，同步调整两侧。
+The user-side discussion covers tool interfaces, git / gh operations, caching, pool creation, distribution, and client integration. The consolidation discussion covers time-based tiers, merging and forgetting rules, the consolidation prompt, batching, and summary quality. Changes to the shared format and capacity interface must be reflected in both designs.
 
-第一版面向个人自用，格式与接口可复用，首批接入 Codex 与 GitHub Copilot。采用官方 MCP SDK 加小型记忆核心；运行中的 Agent 完成语义判断，MCP 不另行调用模型。[官方 TypeScript SDK](https://ts.sdk.modelcontextprotocol.io/v2/)
+The first version is for personal use, with reusable formats and interfaces, initially targeting Codex and GitHub Copilot. It uses the official MCP SDK with a small memory core. The running agent performs semantic judgments; MCP does not make separate model calls. [Official TypeScript SDK](https://ts.sdk.modelcontextprotocol.io/v2/)
 
-两侧通过 Skill 接入，接受一定漏执行风险；不引入 hooks 或维护 Agent 源码分支。其他存储后端保留扩展空间，具体实现不属于第一版。
+Both roles integrate through Skills and accept some risk of missed execution. Hooks and maintained agent source forks are excluded. Other storage backends remain possible extensions outside the first version.
