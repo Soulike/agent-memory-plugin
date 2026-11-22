@@ -13,7 +13,7 @@ The [upstream setup guide](https://github.com/Soulike/ai-review-workflow/blob/ma
 owns the workflow interface, credential prerequisites, and detailed recovery
 instructions. This repository configures:
 
-- The Actions secret `TAVILY_API_KEY`, passed explicitly to the shared workflow.
+- The Actions secret `DEEPSEEK_API_KEY`, passed explicitly to the shared workflow.
   Copilot uses the built-in `GITHUB_TOKEN`; model access and billing must be
   available to that token in this repository.
 - The Actions variables `AI_REVIEW_MODEL` and `AI_REVIEW_REASONING_EFFORT`.
