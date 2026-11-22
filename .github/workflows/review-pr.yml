@@ -28,4 +28,4 @@ jobs:
       model: ${{ vars.AI_REVIEW_MODEL || 'auto' }}
       reasoning-effort: ${{ vars.AI_REVIEW_REASONING_EFFORT }}
     secrets:
-      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
